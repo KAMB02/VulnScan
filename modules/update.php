@@ -167,6 +167,46 @@ function vs_get_latest_release()
 
 function vs_download_file($url, $dest)
 {
+    // Prefer curl with progress if available
+    if (function_exists('curl_version')) {
+        $fp = @fopen($dest, 'w');
+        if ($fp === false) return false;
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_FILE, $fp);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, VULNSCAN_NAME);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 0);
+        // Enable progress
+        curl_setopt($ch, CURLOPT_NOPROGRESS, false);
+        $lastProgress = 0;
+        curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function ($resource, $download_size, $downloaded, $upload_size, $uploaded) use (&$lastProgress) {
+            if ($download_size > 0) {
+                $percent = (int) (($downloaded / $download_size) * 100);
+                if ($percent !== $lastProgress) {
+                    $lastProgress = $percent;
+                    $barLen = 30;
+                    $filled = (int) round($barLen * $percent / 100);
+                    $bar = str_repeat('=', $filled) . str_repeat(' ', $barLen - $filled);
+                    fwrite(STDERR, "\r[Download] [{$bar}] {$percent}%");
+                    if ($percent === 100) fwrite(STDERR, "\n");
+                }
+            } else {
+                // unknown total size; show downloaded bytes
+                if ($downloaded % 4096 === 0) {
+                    fwrite(STDERR, "\r[Download] {$downloaded} bytes");
+                }
+            }
+        });
+        $res = curl_exec($ch);
+        curl_close($ch);
+        fclose($fp);
+        if ($res === false) {
+            return false;
+        }
+        return true;
+    }
+
+    // Fallback to basic fetch
     $data = vs_fetch_url($url);
     if ($data === false) {
         return false;
@@ -316,8 +356,13 @@ function vulnscanUpdate($cwd = null)
     if ($cwd === null) {
         $cwd = realpath(__DIR__ . DIRECTORY_SEPARATOR . '..');
     }
+    // Capture output produced during the update process and only display
+    // a concise success message on success. On failure, show the full log
+    // to help debugging.
+    ob_start();
     $res = vs_perform_update($cwd);
-    // Afficher un message final plus explicite
+    $log = ob_get_clean();
+
     if (isset($res['ok']) && $res['ok']) {
         if (!empty($res['uptodate'])) {
             echo "Package déjà à jour.\n";
@@ -325,6 +370,11 @@ function vulnscanUpdate($cwd = null)
             echo "Mise à jour terminée avec succès.\n";
         }
         return true;
+    }
+
+    // On échec, afficher le log complet puis un message d'erreur succinct
+    if ($log !== '') {
+        echo $log . "\n";
     }
     echo "La mise à jour a échoué.\n";
     return false;

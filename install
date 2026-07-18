@@ -35,6 +35,19 @@ if ! command -v php >/dev/null 2>&1; then
   install_pkg php
 fi
 
+# Ensure common helper tools are present
+if ! command -v git >/dev/null 2>&1; then
+  install_pkg git
+fi
+
+if ! command -v unzip >/dev/null 2>&1; then
+  install_pkg unzip
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+  install_pkg curl
+fi
+
 if ! command -v nmap >/dev/null 2>&1; then
   install_pkg nmap
 fi
@@ -65,3 +78,51 @@ if ! command -v man >/dev/null 2>&1; then
 fi
 
 php "$ROOT_DIR/.setup.php"
+
+# After PHP is available, ensure the Zip extension is enabled (ZipArchive)
+if php -r "exit(class_exists('ZipArchive') ? 0 : 1);" >/dev/null 2>&1; then
+  exit 0
+fi
+
+echo "[!] L'extension PHP 'zip' (ZipArchive) est absente. Tentative d'installation..."
+# Try to install php-zip using common package names (Debian/Ubuntu, versioned, Arch)
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  case "$ID" in
+    ubuntu|debian|kali)
+      sudo apt-get update
+      if sudo apt-get install -y php-zip; then
+        echo "[+] php-zip installé."
+      else
+        # try versioned packages
+        PHPVER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+        if sudo apt-get install -y "php${PHPVER}-zip"; then
+          echo "[+] php${PHPVER}-zip installé."
+        else
+          echo "[!] Impossible d'installer php-zip automatiquement. Installez l'extension manuellement."
+        fi
+      fi
+      ;;
+    arch)
+      sudo pacman -Syu --noconfirm php-zip || echo "[!] Installez php et l'extension zip via pacman manuellement."
+      ;;
+    termux)
+      pkg update
+      pkg install -y php-zip || echo "[!] Installez php-zip manuellement sur Termux."
+      ;;
+    *)
+      echo "[!] Distribution non prise en charge pour l'installation automatique de php-zip."
+      ;;
+  esac
+else
+  echo "[!] Impossible de détecter votre système pour installer php-zip."
+fi
+
+# Re-check ZipArchive
+if php -r "exit(class_exists('ZipArchive') ? 0 : 1);" >/dev/null 2>&1; then
+  echo "[+] ZipArchive disponible."
+  exit 0
+fi
+
+echo "[!] ZipArchive toujours absente. Veuillez installer l'extension PHP 'zip' et relancer l'installation."
+exit 1

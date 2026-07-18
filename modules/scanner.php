@@ -24,15 +24,44 @@ function runNmapScan($target, $ports, $verbose) {
     fclose($pipes[0]);
 
     $fullOutput = "";
-    while (!feof($pipes[1])) {
-        $line = fgets($pipes[1]);
-        if ($line === false) {
-            break;
-        }
-        $fullOutput .= $line;
-        if ($verbose) {
+    // If verbose, stream output live. Otherwise show a simple spinner while nmap runs.
+    if ($verbose) {
+        while (!feof($pipes[1])) {
+            $line = fgets($pipes[1]);
+            if ($line === false) break;
+            $fullOutput .= $line;
             echo colorize($line, "gray");
         }
+    } else {
+        stream_set_blocking($pipes[1], false);
+        $spinner = ['|', '/', '-', '\\'];
+        $si = 0;
+        while (true) {
+            $status = proc_get_status($process);
+            // read any available output
+            $out = '';
+            while (($chunk = fgets($pipes[1])) !== false) {
+                $out .= $chunk;
+            }
+            if ($out !== '') {
+                $fullOutput .= $out;
+            }
+            if (!$status['running']) {
+                // drain remaining output
+                while (!feof($pipes[1])) {
+                    $line = fgets($pipes[1]);
+                    if ($line === false) break;
+                    $fullOutput .= $line;
+                }
+                break;
+            }
+            // print spinner
+            $msg = sprintf("[ ] Scan en cours %s", $spinner[$si % count($spinner)]);
+            echo "\r" . str_pad($msg, 40);
+            usleep(120000);
+            $si++;
+        }
+        echo "\r" . str_repeat(' ', 40) . "\r"; // clear line
     }
     fclose($pipes[1]);
     fclose($pipes[2]);
