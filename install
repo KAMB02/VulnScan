@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -e
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+install_pkg() {
+  local pkg="$1"
+  echo "[!] $pkg n'est pas installé. Installation en cours..."
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    case "$ID" in
+      ubuntu|debian|kali)
+        sudo apt-get update
+        sudo apt-get install -y "$pkg"
+        ;;
+      arch)
+        sudo pacman -Syu --noconfirm "$pkg"
+        ;;
+      termux)
+        pkg update
+        pkg install -y "$pkg"
+        ;;
+      *)
+        echo "[!] Distribution non prise en charge. Installez $pkg manuellement."
+        exit 1
+        ;;
+    esac
+  else
+    echo "[!] Impossible de détecter votre système."
+    exit 1
+  fi
+}
+
+if ! command -v php >/dev/null 2>&1; then
+  install_pkg php
+fi
+
+if ! command -v nmap >/dev/null 2>&1; then
+  install_pkg nmap
+fi
+
+if ! command -v man >/dev/null 2>&1; then
+  echo "[!] Le programme 'man' n'est pas installé. Installation en cours..."
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    case "$ID" in
+      ubuntu|debian|kali)
+        sudo apt-get update
+        sudo apt-get install -y man-db
+        ;;
+      arch)
+        sudo pacman -Syu --noconfirm man-db
+        ;;
+      termux)
+        pkg update
+        pkg install -y man
+        ;;
+      *)
+        echo "[!] Impossible d'installer la commande man sur cette distribution."
+        ;;
+    esac
+  else
+    echo "[!] Impossible de détecter votre système."
+  fi
+fi
+
+php "$ROOT_DIR/.setup.php"

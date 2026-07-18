@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -e
+
+if [ -f "$HOME/.local/share/VulnScan/modules/app.php" ]; then
+  php "$HOME/.local/share/VulnScan/modules/app.php" "$@"
+elif [ -f "/usr/share/VulnScan/modules/app.php" ]; then
+  php "/usr/share/VulnScan/modules/app.php" "$@"
+elif [ -f "$(dirname "$0")/app.php" ]; then
+  php "$(dirname "$0")/app.php" "$@"
+else
+  echo "[!] Impossible de trouver l'application VulnScan." >&2
+  exit 1
+fi

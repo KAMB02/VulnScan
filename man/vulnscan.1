@@ -1,0 +1,406 @@
+.TH VULNSCAN 1 "July 2026" "VulnScan 1.0" "User Commands"
+
+.SH NAME
+vulnscan \- outil de détection et d'analyse des vulnérabilités basé sur Nmap
+
+.SH SYNOPSIS
+.B vulnscan
+.RI [ OPTIONS ]
+
+.br
+
+.B vulnscan
+.BI --target " CIBLE"
+
+.br
+
+.B vulnscan
+.BI --target " CIBLE " --ports " PORTS " --grade " NIVEAU"
+
+.SH DESCRIPTION
+.B VulnScan
+est un outil en ligne de commande permettant d'automatiser les analyses de
+vulnérabilités réseau à l'aide de
+.BR Nmap (1)
+et de ses scripts NSE.
+
+L'application exécute automatiquement les scans appropriés, interprète les
+résultats obtenus et génère des rapports lisibles dans plusieurs formats.
+
+VulnScan permet notamment de :
+
+.IP \(bu 4
+Scanner une adresse IPv4 ou IPv6.
+
+.IP \(bu
+Scanner un nom de domaine.
+
+.IP \(bu
+Scanner un réseau complet au format CIDR.
+
+.IP \(bu
+Détecter les ports ouverts.
+
+.IP \(bu
+Identifier les services et leurs versions.
+
+.IP \(bu
+Lancer les scripts NSE de détection de vulnérabilités.
+
+.IP \(bu
+Classer les vulnérabilités par niveau de gravité.
+
+.IP \(bu
+Générer des rapports HTML et JSON.
+
+.IP \(bu
+Afficher les résultats directement dans le terminal.
+
+.SH OPTIONS
+
+.TP
+.BI "-t, --target " CIBLE
+Spécifie la cible à analyser.
+
+La cible peut être :
+
+.RS
+.IP \(bu 4
+une adresse IPv4
+
+.IP \(bu
+une adresse IPv6
+
+.IP \(bu
+un nom d'hôte
+
+.IP \(bu
+un domaine
+
+.IP \(bu
+un réseau CIDR
+
+.IP \(bu
+une liste d'adresses IP
+.RE
+
+Exemples :
+
+.nf
+vulnscan -t 192.168.1.10
+vulnscan -t 192.168.1.0/24
+vulnscan -t example.com
+.fi
+
+.TP
+.BI "-p, --ports " PORTS
+Définit les ports à scanner.
+
+Le paramètre accepte :
+
+.RS
+.IP \(bu 4
+un port unique
+
+.IP \(bu
+plusieurs ports séparés par des virgules
+
+.IP \(bu
+une plage de ports
+.RE
+
+Exemples :
+
+.nf
+-p 22
+-p 22,80,443
+-p 1-1024
+.fi
+
+.TP
+.BI "-g, --grade " NIVEAU
+Filtre les vulnérabilités selon leur niveau de gravité.
+
+Valeurs acceptées :
+
+.RS
+.IP \(bu 4
+LOW
+
+.IP \(bu
+MEDIUM
+
+.IP \(bu
+HIGH
+
+.IP \(bu
+CRITICAL
+.RE
+
+.TP
+.BI "-o, --output " FICHIER
+Enregistre le rapport au format HTML.
+
+Exemple :
+
+.nf
+-o rapport.html
+.fi
+
+.TP
+.BI "-j, --json " FICHIER
+Génère un rapport JSON destiné à une exploitation automatique ou à
+une intégration dans d'autres outils.
+
+.TP
+.B --console
+Affiche le rapport uniquement dans le terminal sans créer de fichier.
+
+.TP
+.B --no-color
+Désactive complètement les couleurs ANSI.
+
+Option utile lors d'une redirection de sortie ou dans un environnement CI/CD.
+
+.TP
+.B -v, --verbose
+Active le mode verbeux.
+
+Affiche notamment :
+
+.IP \(bu 4
+les commandes Nmap exécutées
+
+.IP \(bu
+la sortie brute de Nmap
+
+.IP \(bu
+les erreurs éventuelles
+
+.IP \(bu
+les temps d'exécution
+
+.TP
+.B -q, --quiet
+Réduit au minimum les messages affichés.
+
+Seuls les résultats essentiels sont affichés.
+
+.TP
+.B -u, --update
+Recherche une nouvelle version de VulnScan et met automatiquement
+à jour le programme si une version plus récente est disponible.
+
+.TP
+.B -V, --version
+Affiche la version actuellement installée.
+
+.TP
+.B -m, --man
+Affiche cette page de manuel.
+
+.TP
+.B -h, --help
+Affiche l'aide rapide de la ligne de commande.
+
+.SH SCAN PROCESS
+
+Lors d'une analyse, VulnScan effectue les étapes suivantes :
+
+.IP "1." 4
+Validation des paramètres.
+
+.IP "2."
+Vérification de la présence de Nmap.
+
+.IP "3."
+Résolution DNS de la cible.
+
+.IP "4."
+Découverte des hôtes.
+
+.IP "5."
+Analyse des ports.
+
+.IP "6."
+Détection des services.
+
+.IP "7."
+Identification des versions.
+
+.IP "8."
+Exécution des scripts NSE.
+
+.IP "9."
+Analyse des vulnérabilités.
+
+.IP "10."
+Classification par niveau de gravité.
+
+.IP "11."
+Génération des rapports.
+
+.SH REPORTS
+
+Les rapports peuvent être générés aux formats suivants :
+
+.TP
+HTML
+Rapport interactif destiné à une lecture dans un navigateur.
+
+.TP
+JSON
+Rapport structuré destiné aux scripts et aux API.
+
+Les rapports contiennent notamment :
+
+.IP \(bu 4
+Informations générales
+
+.IP \(bu
+Date et heure du scan
+
+.IP \(bu
+Cible analysée
+
+.IP \(bu
+Ports ouverts
+
+.IP \(bu
+Services détectés
+
+.IP \(bu
+Versions
+
+.IP \(bu
+Vulnérabilités
+
+.IP \(bu
+Niveau de gravité
+
+.IP \(bu
+Résumé final
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Analyse terminée avec succès.
+
+.TP
+.B 1
+Erreur interne.
+
+.TP
+.B 2
+Paramètres invalides.
+
+.TP
+.B 3
+Nmap introuvable.
+
+.TP
+.B 4
+Impossible d'atteindre la cible.
+
+.SH EXAMPLES
+
+Scanner une machine :
+
+.nf
+vulnscan -t 192.168.1.15
+.fi
+
+Scanner un domaine :
+
+.nf
+vulnscan --target example.com
+.fi
+
+Scanner uniquement les ports Web :
+
+.nf
+vulnscan -t example.com -p 80,443
+.fi
+
+Afficher uniquement les vulnérabilités critiques :
+
+.nf
+vulnscan -t 192.168.1.10 -g CRITICAL
+.fi
+
+Créer un rapport HTML :
+
+.nf
+vulnscan -t 192.168.1.10 -o rapport.html
+.fi
+
+Créer un rapport JSON :
+
+.nf
+vulnscan -t 192.168.1.10 -j rapport.json
+.fi
+
+Afficher le manuel :
+
+.nf
+vulnscan --man
+.fi
+
+.SH FILES
+
+.TP
+.I /etc/vulnscan/config.conf
+Fichier de configuration principal.
+
+.TP
+.I ~/.config/vulnscan/
+Configuration utilisateur.
+
+.TP
+.I /usr/share/vulnscan/
+Scripts, modèles et ressources.
+
+.TP
+.I /var/log/vulnscan.log
+Journal d'exécution.
+
+.SH DEPENDENCIES
+
+VulnScan nécessite :
+
+.IP \(bu 4
+PHP 8.2 ou supérieur
+
+.IP \(bu
+Nmap
+
+.IP \(bu
+Accès réseau
+
+.IP \(bu
+Privilèges suffisants pour certains types de scans
+
+.SH SEE ALSO
+
+.BR nmap (1),
+.BR ping (8),
+.BR traceroute (8),
+.BR netcat (1)
+
+.SH BUGS
+
+Les anomalies peuvent être signalées sur le dépôt GitHub officiel.
+
+.SH AUTHOR
+
+KADJO ALLOUAN MOISE BIENVENUE
+
+GitHub :
+https://github.com/KAMB02
+
+.SH COPYRIGHT
+
+Copyright (c) 2026 KADJO ALLOUAN MOISE BIENVENUE.
+
+Distribué sous licence MIT.
