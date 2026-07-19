@@ -6,15 +6,6 @@ HTML/JSON/CSV, croisement automatique avec Exploit-DB, et un système de
 mise à jour intégré.
 
 ## Fonctionnement
-
-VulnScan lance toujours :
-
-```bash
-nmap --script vuln <cible>
-```
-
-Puis, **automatiquement et sans configuration supplémentaire** :
-
 - si des services web sont détectés parmi les ports ouverts (80, 443,
   8080, 8443...), et que les outils correspondants sont installés,
   **Nikto** et **Nuclei** sont lancés en complément sur ces services ;
