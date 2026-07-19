@@ -1,4 +1,4 @@
-.TH VULNSCAN 1 "July 2026" "VulnScan 1.0" "User Commands"
+.TH VULNSCAN 1 "July 2026" "VulnScan 1.1" "User Commands"
 
 .SH NAME
 vulnscan \- outil de détection et d'analyse des vulnérabilités basé sur Nmap
@@ -27,6 +27,19 @@ et de ses scripts NSE.
 L'application exécute automatiquement les scans appropriés, interprète les
 résultats obtenus et génère des rapports lisibles dans plusieurs formats.
 
+Lorsque des services web sont détectés parmi les ports ouverts, VulnScan
+lance automatiquement des analyses complémentaires avec
+.B nikto
+et
+.B nuclei
+s'ils sont installés. Toutes les CVE identifiées, quelle que soit leur
+origine, sont ensuite croisées automatiquement avec Exploit-DB via
+.BR searchsploit (1) :
+si un exploit public existe, la vulnérabilité concernée est reclassée en
+gravité CRITICAL. Ces outils complémentaires sont facultatifs ; s'ils sont
+absents, VulnScan continue de fonctionner normalement avec les seuls
+résultats de Nmap.
+
 VulnScan permet notamment de :
 
 .IP \(bu 4
@@ -51,7 +64,10 @@ Lancer les scripts NSE de détection de vulnérabilités.
 Classer les vulnérabilités par niveau de gravité.
 
 .IP \(bu
-Générer des rapports HTML et JSON.
+Générer des rapports HTML, JSON et CSV.
+
+.IP \(bu
+Croiser automatiquement les CVE trouvées avec Exploit-DB.
 
 .IP \(bu
 Afficher les résultats directement dans le terminal.
@@ -153,6 +169,10 @@ Génère un rapport JSON destiné à une exploitation automatique ou à
 une intégration dans d'autres outils.
 
 .TP
+.BI "-s, --csv " FICHIER
+Génère un rapport CSV, adapté à une ouverture dans un tableur.
+
+.TP
 .B --console
 Affiche le rapport uniquement dans le terminal sans créer de fichier.
 
@@ -235,9 +255,16 @@ Exécution des scripts NSE.
 Analyse des vulnérabilités.
 
 .IP "10."
-Classification par niveau de gravité.
+Analyse complémentaire des services web détectés (Nikto, Nuclei), si ces
+outils sont installés.
 
 .IP "11."
+Croisement des CVE trouvées avec Exploit-DB (searchsploit), si installé.
+
+.IP "12."
+Classification par niveau de gravité.
+
+.IP "13."
 Génération des rapports.
 
 .SH REPORTS
@@ -251,6 +278,10 @@ Rapport interactif destiné à une lecture dans un navigateur.
 .TP
 JSON
 Rapport structuré destiné aux scripts et aux API.
+
+.TP
+CSV
+Rapport tabulaire destiné à une ouverture dans un tableur.
 
 Les rapports contiennent notamment :
 
@@ -289,19 +320,8 @@ Analyse terminée avec succès.
 
 .TP
 .B 1
-Erreur interne.
-
-.TP
-.B 2
-Paramètres invalides.
-
-.TP
-.B 3
-Nmap introuvable.
-
-.TP
-.B 4
-Impossible d'atteindre la cible.
+Erreur : cible manquante ou invalide, échec de l'exécution de nmap, échec
+d'écriture d'un rapport, ou option inconnue.
 
 .SH EXAMPLES
 
@@ -341,6 +361,12 @@ Créer un rapport JSON :
 vulnscan -t 192.168.1.10 -j rapport.json
 .fi
 
+Créer un rapport CSV :
+
+.nf
+vulnscan -t 192.168.1.10 -s rapport.csv
+.fi
+
 Afficher le manuel :
 
 .nf
@@ -350,27 +376,23 @@ vulnscan --man
 .SH FILES
 
 .TP
-.I /etc/vulnscan/config.conf
-Fichier de configuration principal.
+.I /usr/share/VulnScan/
+Fichiers d'installation lorsque VulnScan est installé avec les droits root.
 
 .TP
-.I ~/.config/vulnscan/
-Configuration utilisateur.
+.I ~/.local/share/VulnScan/
+Fichiers d'installation lorsque VulnScan est installé sans les droits root.
 
 .TP
-.I /usr/share/vulnscan/
-Scripts, modèles et ressources.
-
-.TP
-.I /var/log/vulnscan.log
-Journal d'exécution.
+.I <dossier d'installation>/reports/
+Dossier de rapports HTML par défaut.
 
 .SH DEPENDENCIES
 
 VulnScan nécessite :
 
 .IP \(bu 4
-PHP 8.2 ou supérieur
+PHP (CLI)
 
 .IP \(bu
 Nmap
@@ -381,9 +403,25 @@ Accès réseau
 .IP \(bu
 Privilèges suffisants pour certains types de scans
 
+Outils facultatifs, utilisés automatiquement s'ils sont installés :
+
+.IP \(bu 4
+.B nikto
+(analyse web complémentaire)
+
+.IP \(bu
+.B nuclei
+(scan par templates)
+
+.IP \(bu
+.B searchsploit
+, fourni par le paquet exploitdb (croisement avec Exploit-DB)
+
 .SH SEE ALSO
 
 .BR nmap (1),
+.BR nikto (1),
+.BR searchsploit (1),
 .BR ping (8),
 .BR traceroute (8),
 .BR netcat (1)

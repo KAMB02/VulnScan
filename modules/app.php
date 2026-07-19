@@ -16,6 +16,7 @@ function printHelp($version) {
     echo "  -t, --target <cible>       Cible à scanner (IP, plage CIDR ou nom d'hôte)\n";
     echo "  -o, --output <fichier>     Chemin du rapport HTML (défaut : ./reports/rapport-<date>.html)\n";
     echo "  -j, --json <fichier>       Exporte également un rapport JSON\n";
+    echo "  -s, --csv <fichier>        Exporte également un rapport CSV\n";
     echo "  -c, --console              N'écrit aucun fichier, affiche seulement le rapport dans le terminal\n";
     echo "  -g, --grade [NIVEAU]       N'affiche que les résultats >= NIVEAU (LOW|MEDIUM|HIGH|CRITICAL)\n";
     echo "                             Sans argument : affiche la légende des niveaux\n";
@@ -34,6 +35,7 @@ function printHelp($version) {
     echo "  vulnscan -t example.com -p 80,443 -g HIGH\n";
     echo "  vulnscan -t 10.0.0.5 -c -v\n";
     echo "  vulnscan -t 10.0.0.0/24 -o /tmp/rapport.html -j /tmp/rapport.json\n";
+    echo "  vulnscan -t 10.0.0.5 -s /tmp/rapport.csv\n";
     echo "  vulnscan --update\n";
 }
 
@@ -42,6 +44,7 @@ function printHelp($version) {
 $target = null;
 $output = null;
 $json = null;
+$csv = null;
 $ports = null;
 $gradeFilter = null;
 $consoleOnly = false;
@@ -85,6 +88,15 @@ for ($i = 1; $i < $argc; $i++) {
                 exit(1);
             }
             $json = $argv[++$i];
+            break;
+
+        case "--csv":
+        case "-s":
+            if (!isset($argv[$i + 1])) {
+                echo "L'option $arg nécessite une valeur.\n";
+                exit(1);
+            }
+            $csv = $argv[++$i];
             break;
 
         case "--ports":
@@ -209,20 +221,13 @@ if ($ports !== null && !preg_match('/^[0-9,\-]+$/', $ports)) {
 
 // --- Exécution du scan ---------------------------------------------------
 
-if (!$quiet) {
-    $portInfo = $ports ? " (ports : $ports)" : "";
-    echo colorize("[+] Scan de $target$portInfo en cours...\n", "cyan");
-}
+[$findings, $severity, $rawOutput] = runFullScan($target, $ports, $verbose, $quiet);
 
-$rawOutput = runNmapScan($target, $ports, $verbose);
-
-if ($rawOutput === null || trim($rawOutput) === "") {
+if ($findings === null) {
     echo colorize("Erreur lors de l'exécution de nmap. Vérifie que nmap est installé et que la cible est joignable.\n", "red");
     exit(1);
 }
 
-$findings = parseFindings($rawOutput);
-$severity = overallSeverity($findings, $rawOutput);
 $displayFindings = filterByGrade($findings, $gradeFilter);
 
 // --- Affichage terminal ---------------------------------------------------
@@ -261,6 +266,22 @@ if ($json !== null) {
         exit(1);
     }
     echo colorize("[OK] Rapport JSON enregistré : $json\n", "green");
+}
+
+// --- Rapport CSV (optionnel) -------------------------------------------
+
+if ($csv !== null) {
+    $csvDir = dirname($csv);
+    if (!is_dir($csvDir) && !@mkdir($csvDir, 0777, true) && !is_dir($csvDir)) {
+        echo colorize("Impossible de créer le dossier de rapport CSV : $csvDir\n", "red");
+        exit(1);
+    }
+    $csvReport = buildCsvReport($target, $severity, $displayFindings);
+    if (file_put_contents($csv, $csvReport) === false) {
+        echo colorize("Impossible d'écrire le rapport CSV dans : $csv\n", "red");
+        exit(1);
+    }
+    echo colorize("[OK] Rapport CSV enregistré : $csv\n", "green");
 }
 
 echo colorize("[OK] Niveau estimé : $severity\n", severityColorName($severity), true);

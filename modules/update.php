@@ -20,7 +20,7 @@
  */
 
 define("VULNSCAN_NAME", "VulnScan");
-define("VULNSCAN_VERSION", "1.0.0");
+define("VULNSCAN_VERSION", "1.1.0");
 
 define("VULNSCAN_OWNER", "KAMB02");
 define("VULNSCAN_REPO", "VulnScan");

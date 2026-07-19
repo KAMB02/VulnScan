@@ -1,0 +1,29 @@
+ **Appel aux retours de la communauté cybersécurité : testez VulnScan **
+
+Bonjour à tous,
+
+Dans le cadre de mon apprentissage et de mes projets en cybersécurité, j’ai développé **VulnScan**, un outil open source permettant d’effectuer des analyses de vulnérabilités et d’aider à l’identification des faiblesses de sécurité d’un système.
+
+ Le projet est disponible sur GitHub :
+ [https://github.com/KAMB02/VulnScan](https://github.com/KAMB02/VulnScan)
+
+Aujourd’hui, je souhaite aller plus loin en sollicitant l’avis des **experts en cybersécurité, pentesters, administrateurs systèmes/réseaux et utilisateurs intéressés par la sécurité informatique**.
+
+Vos retours m’aideraient énormément pour :
+ améliorer les fonctionnalités existantes ;
+ identifier les éventuels bugs ou limitations ;
+ optimiser l’expérience utilisateur ;
+ ajouter des fonctionnalités pertinentes selon les besoins du terrain.
+
+Si vous avez l’occasion de tester l’outil, n’hésitez pas à partager :
+
+* votre expérience d’utilisation ;
+* les points positifs ;
+* les axes d’amélioration ;
+* vos suggestions de nouvelles fonctionnalités.
+
+Chaque retour constructif sera pris en compte pour faire évoluer VulnScan vers un outil plus performant et adapté aux besoins de la communauté.
+
+Merci d’avance à toutes les personnes qui prendront le temps de tester, commenter ou partager. 🙏
+
+#CyberSecurity #OpenSource #Pentesting #EthicalHacking #DevSecOps #Linux #GitHub #VulnerabilityAssessment

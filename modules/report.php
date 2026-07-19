@@ -66,6 +66,14 @@ function printTerminalReport($target, $severity, $findings, $gradeFilter) {
         if (!empty($f["state"])) {
             echo "  État  : " . $f["state"] . "\n";
         }
+        if (!empty($f["exploits"])) {
+            echo "  " . colorize("⚠ Exploit public disponible", "red", true) . "\n";
+            foreach (array_slice($f["exploits"], 0, 2) as $exploit) {
+                $title = !empty($exploit["title"]) ? $exploit["title"] : "Exploit-DB";
+                $id = !empty($exploit["edb_id"]) ? " (EDB-ID " . $exploit["edb_id"] . ")" : "";
+                echo "    - " . colorize($title . $id, "red") . "\n";
+            }
+        }
     }
     echo "\n" . colorize("========================================", "gray") . "\n";
 }
@@ -99,6 +107,15 @@ ROW;
             if (!empty($f["cves"])) {
                 $rows .= "  <p><strong>CVE :</strong> {$cves}</p>\n";
             }
+            if (!empty($f["exploits"])) {
+                $exploitLines = [];
+                foreach (array_slice($f["exploits"], 0, 3) as $exploit) {
+                    $title = htmlspecialchars(!empty($exploit["title"]) ? $exploit["title"] : "Exploit-DB", ENT_QUOTES);
+                    $id = !empty($exploit["edb_id"]) ? " (EDB-ID " . htmlspecialchars((string) $exploit["edb_id"], ENT_QUOTES) . ")" : "";
+                    $exploitLines[] = $title . $id;
+                }
+                $rows .= '  <p class="exploit-badge">⚠ Exploit public disponible : ' . implode(" ; ", $exploitLines) . "</p>\n";
+            }
             $rows .= "  <pre>{$details}</pre>\n</div>\n";
         }
     }
@@ -124,6 +141,7 @@ ROW;
     .sev-low { border-left-color: #007b8a; }
     .finding-header { margin-bottom: 6px; }
     .script-name { font-weight: bold; }
+    .exploit-badge { color: #b00020; font-weight: bold; }
     pre { background: #f4f4f4; padding: 10px; border-radius: 6px; white-space: pre-wrap; font-size: 0.9em; }
   </style>
 </head>
@@ -153,4 +171,44 @@ function buildJsonReport($target, $severity, $findings) {
         "generated" => date("c"),
         "findings"  => $findings,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+}
+
+/**
+ * Génère le rapport CSV.
+ */
+function buildCsvReport($target, $severity, $findings) {
+    $fp = fopen("php://temp", "r+");
+
+    fputcsv($fp, ["Cible", $target]);
+    fputcsv($fp, ["Niveau global", $severity]);
+    fputcsv($fp, ["Généré le", date("d/m/Y H:i:s")]);
+    fputcsv($fp, []);
+    fputcsv($fp, ["Vulnérabilité", "Gravité", "CVE", "Exploit public disponible", "Détails"]);
+
+    foreach ($findings as $f) {
+        $exploitSummary = "";
+        if (!empty($f["exploits"])) {
+            $parts = [];
+            foreach ($f["exploits"] as $exploit) {
+                $title = !empty($exploit["title"]) ? $exploit["title"] : "Exploit-DB";
+                $id = !empty($exploit["edb_id"]) ? " (EDB-ID " . $exploit["edb_id"] . ")" : "";
+                $parts[] = $title . $id;
+            }
+            $exploitSummary = implode(" ; ", $parts);
+        }
+
+        fputcsv($fp, [
+            $f["script"],
+            $f["severity"],
+            implode(", ", $f["cves"]),
+            $exploitSummary,
+            $f["state"] ?? "",
+        ]);
+    }
+
+    rewind($fp);
+    $csv = stream_get_contents($fp);
+    fclose($fp);
+
+    return $csv;
 }

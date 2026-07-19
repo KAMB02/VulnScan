@@ -1,24 +1,40 @@
 # VulnScan
 
-VulnScan est un scanner de vulnérabilités simple basé sur Nmap, avec analyse
-structurée des résultats, rapport coloré dans le terminal, export HTML/JSON,
-et un système de mise à jour intégré.
+VulnScan est un scanner de vulnérabilités basé sur Nmap, avec analyse
+structurée des résultats, rapport coloré dans le terminal, export
+HTML/JSON/CSV, croisement automatique avec Exploit-DB, et un système de
+mise à jour intégré.
 
 ## Fonctionnement
 
-Il exécute :
+VulnScan lance toujours :
 
 ```bash
 nmap --script vuln <cible>
 ```
 
-Puis il :
-- analyse la sortie de nmap script par script (extraction des CVE, de l'état
-  de chaque vulnérabilité)
-- attribue un niveau de gravité par vulnérabilité et un niveau global :
-  CRITICAL, HIGH, MEDIUM, LOW
-- affiche un rapport coloré directement dans le terminal
-- génère un rapport HTML (et en option un rapport JSON)
+Puis, **automatiquement et sans configuration supplémentaire** :
+
+- si des services web sont détectés parmi les ports ouverts (80, 443,
+  8080, 8443...), et que les outils correspondants sont installés,
+  **Nikto** et **Nuclei** sont lancés en complément sur ces services ;
+- toutes les CVE identifiées (quelle que soit leur origine) sont
+  automatiquement croisées avec **Exploit-DB** via `searchsploit` ; si un
+  exploit public existe, la vulnérabilité est remontée en `CRITICAL` et un
+  badge « ⚠ Exploit public disponible » apparaît dans le rapport ;
+- un niveau de gravité est calculé par vulnérabilité et un niveau global
+  pour l'ensemble du scan : `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`.
+
+Le rapport final ne distingue pas l'outil à l'origine de chaque résultat :
+tout est fusionné en une seule liste de vulnérabilités, pour rester lisible
+et directement exploitable.
+
+Aucun de ces outils complémentaires n'est obligatoire : si Nikto, Nuclei ou
+`searchsploit` ne sont pas installés, VulnScan continue de fonctionner
+normalement avec les seuls résultats de nmap, sans erreur ni interruption.
+
+Le rapport est affiché directement dans le terminal, et peut être exporté
+en HTML, JSON et/ou CSV.
 
 ## Installation
 
@@ -52,6 +68,7 @@ vulnscan --target example.com --output /tmp/rapport.html
 | `-t`, `--target <cible>` | Cible à scanner (IP, plage CIDR ou nom d'hôte) |
 | `-o`, `--output <fichier>` | Chemin du rapport HTML (défaut : `./reports/rapport-<date>.html`) |
 | `-j`, `--json <fichier>` | Exporte également un rapport JSON |
+| `-s`, `--csv <fichier>` | Exporte également un rapport CSV |
 | `-c`, `--console` | N'écrit aucun fichier, affiche seulement le rapport dans le terminal |
 | `-g`, `--grade [NIVEAU]` | N'affiche que les résultats >= NIVEAU (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). Sans argument : affiche la légende des niveaux |
 | `-p`, `--ports <ports>` | Limite le scan à des ports précis (ex : `22,80,443` ou `1-1000`) |
@@ -79,8 +96,28 @@ vulnscan --target 192.168.1.1
 vulnscan -t example.com -p 80,443 -g HIGH
 vulnscan -t 10.0.0.5 -c -v
 vulnscan -t 10.0.0.0/24 -o /tmp/rapport.html -j /tmp/rapport.json
+vulnscan -t 10.0.0.5 -s /tmp/rapport.csv
 vulnscan --update
 ```
+
+## Outils complémentaires (facultatifs)
+
+Ces outils ne sont pas requis pour utiliser VulnScan, mais s'ils sont
+installés, VulnScan les utilise automatiquement quand c'est pertinent :
+
+| Outil | Rôle dans VulnScan | Installation (Kali/Debian) |
+|---|---|---|
+| `nikto` | Scan de vulnérabilités web complémentaire | `apt install nikto` |
+| `nuclei` | Scan par templates (CVE récentes, mauvaises configs) | voir [projectdiscovery/nuclei](https://github.com/projectdiscovery/nuclei) |
+| `searchsploit` | Croisement des CVE trouvées avec les exploits publics d'Exploit-DB | `apt install exploitdb` |
+
+## Outils non intégrés
+
+Nessus, OpenVAS/Greenbone, Burp Suite et Metasploit ne sont pas intégrés
+directement : ce sont des solutions nécessitant un serveur, une API ou une
+licence, incompatibles avec un simple wrapper en ligne de commande. Ils
+restent complémentaires à VulnScan et peuvent être utilisés en parallèle,
+notamment pour l'exploitation manuelle des vulnérabilités identifiées.
 
 ## Sécurité
 

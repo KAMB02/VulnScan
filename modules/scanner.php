@@ -180,3 +180,300 @@ function overallSeverity($findings, $rawOutput) {
     }
     return "LOW";
 }
+
+/**
+ * Vérifie si une commande externe est disponible dans le PATH.
+ */
+function toolAvailable($binary) {
+    return trim((string) shell_exec("command -v " . escapeshellarg($binary) . " 2>/dev/null")) !== "";
+}
+
+/**
+ * Exécution générique d'une commande externe avec le même comportement
+ * que runNmapScan() : streaming en direct si --verbose, spinner sinon.
+ */
+function runToolCommand($cmd, $verbose) {
+    $descriptors = [
+        0 => ["pipe", "r"],
+        1 => ["pipe", "w"],
+        2 => ["pipe", "w"],
+    ];
+
+    $process = proc_open($cmd, $descriptors, $pipes);
+    if (!is_resource($process)) {
+        return null;
+    }
+    fclose($pipes[0]);
+
+    $fullOutput = "";
+    if ($verbose) {
+        while (!feof($pipes[1])) {
+            $line = fgets($pipes[1]);
+            if ($line === false) break;
+            $fullOutput .= $line;
+            echo colorize($line, "gray");
+        }
+    } else {
+        stream_set_blocking($pipes[1], false);
+        $spinner = ['|', '/', '-', '\\'];
+        $si = 0;
+        while (true) {
+            $status = proc_get_status($process);
+            $out = '';
+            while (($chunk = fgets($pipes[1])) !== false) {
+                $out .= $chunk;
+            }
+            if ($out !== '') {
+                $fullOutput .= $out;
+            }
+            if (!$status['running']) {
+                while (!feof($pipes[1])) {
+                    $line = fgets($pipes[1]);
+                    if ($line === false) break;
+                    $fullOutput .= $line;
+                }
+                break;
+            }
+            $msg = sprintf("[ ] Analyse en cours %s", $spinner[$si % count($spinner)]);
+            echo "\r" . str_pad($msg, 40);
+            usleep(120000);
+            $si++;
+        }
+        echo "\r" . str_repeat(' ', 40) . "\r";
+    }
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    proc_close($process);
+
+    return $fullOutput;
+}
+
+/**
+ * Repère les services web ouverts (80, 443, 8080, 8443...) dans la sortie
+ * nmap, pour savoir si un scan web complémentaire (Nikto/Nuclei) est
+ * pertinent, sans que l'utilisateur ait à le demander explicitement.
+ */
+function extractWebServices($rawOutput, $target) {
+    $urls = [];
+    $lines = preg_split('/\r\n|\r|\n/', $rawOutput);
+
+    foreach ($lines as $line) {
+        if (preg_match('/^(\d+)\/tcp\s+open\s+(\S+)/i', trim($line), $m)) {
+            $port = $m[1];
+            $service = strtolower($m[2]);
+
+            $isHttps = strpos($service, "https") !== false || in_array($port, ["443", "8443"], true);
+            $isHttp = !$isHttps && (strpos($service, "http") !== false || in_array($port, ["80", "8080", "8000"], true));
+
+            if ($isHttps) {
+                $urls[] = "https://{$target}:{$port}";
+            } elseif ($isHttp) {
+                $urls[] = "http://{$target}:{$port}";
+            }
+        }
+    }
+
+    return array_values(array_unique($urls));
+}
+
+/**
+ * Lance Nikto sur une URL et retourne sa sortie brute.
+ */
+function runNiktoScan($url, $verbose) {
+    $cmd = "nikto -h " . escapeshellarg($url) . " -Format txt 2>&1";
+    return runToolCommand($cmd, $verbose);
+}
+
+/**
+ * Analyse la sortie de Nikto et ne conserve que les lignes correspondant
+ * à des constats de sécurité réels (pas les lignes d'information générale).
+ */
+function parseNiktoFindings($output) {
+    $findings = [];
+    $lines = preg_split('/\r\n|\r|\n/', (string) $output);
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === "" || $line[0] !== "+") {
+            continue;
+        }
+        if (!preg_match('/OSVDB|CVE-|vulnerable|outdated|disclosure|injection|XSS|exposed|misconfigur/i', $line)) {
+            continue;
+        }
+
+        $cves = [];
+        if (preg_match_all('/CVE-\d{4}-\d{4,7}/i', $line, $cm)) {
+            foreach ($cm[0] as $c) {
+                $cves[] = strtoupper($c);
+            }
+        }
+
+        $severity = "LOW";
+        if (preg_match('/injection|remote code|RCE|CVE-/i', $line)) {
+            $severity = "HIGH";
+        } elseif (preg_match('/XSS|disclosure|outdated|misconfigur/i', $line)) {
+            $severity = "MEDIUM";
+        }
+
+        $findings[] = [
+            "script"   => "Analyse web (Nikto)",
+            "state"    => ltrim($line, "+ "),
+            "severity" => $severity,
+            "cves"     => array_values(array_unique($cves)),
+            "details"  => ltrim($line, "+ "),
+        ];
+    }
+
+    return $findings;
+}
+
+/**
+ * Lance Nuclei sur une URL et retourne sa sortie brute (JSON ligne par ligne).
+ */
+function runNucleiScan($url, $verbose) {
+    $cmd = "nuclei -u " . escapeshellarg($url) . " -jsonl -silent 2>&1";
+    return runToolCommand($cmd, $verbose);
+}
+
+/**
+ * Analyse la sortie JSON de Nuclei.
+ */
+function parseNucleiFindings($output) {
+    $findings = [];
+    $lines = preg_split('/\r\n|\r|\n/', trim((string) $output));
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === "" || $line[0] !== "{") {
+            continue;
+        }
+        $data = json_decode($line, true);
+        if (!is_array($data)) {
+            continue;
+        }
+
+        $info = $data["info"] ?? [];
+        $sevMap = ["INFO" => "LOW", "LOW" => "LOW", "MEDIUM" => "MEDIUM", "HIGH" => "HIGH", "CRITICAL" => "CRITICAL"];
+        $severity = $sevMap[strtoupper($info["severity"] ?? "info")] ?? "LOW";
+
+        $cves = [];
+        foreach (($info["classification"]["cve-id"] ?? []) as $c) {
+            $cves[] = strtoupper($c);
+        }
+
+        $name = $info["name"] ?? ($data["template-id"] ?? "Résultat Nuclei");
+        $matchedAt = $data["matched-at"] ?? "";
+
+        $findings[] = [
+            "script"   => $name,
+            "state"    => $matchedAt !== "" ? "Correspondance : $matchedAt" : "Correspondance trouvée",
+            "severity" => $severity,
+            "cves"     => array_values(array_unique($cves)),
+            "details"  => trim(($info["description"] ?? "") . ($matchedAt !== "" ? "\n$matchedAt" : "")),
+        ];
+    }
+
+    return $findings;
+}
+
+/**
+ * Croise une liste de CVE avec Exploit-DB via searchsploit et retourne,
+ * pour chaque CVE ayant un résultat, la liste des exploits publics trouvés.
+ */
+function lookupExploitsForCves(array $cves) {
+    $results = [];
+    if (empty($cves) || !toolAvailable("searchsploit")) {
+        return $results;
+    }
+
+    foreach (array_unique($cves) as $cve) {
+        $cmd = "searchsploit --cve " . escapeshellarg($cve) . " -j 2>/dev/null";
+        $json = shell_exec($cmd);
+        $data = json_decode((string) $json, true);
+        if (empty($data["RESULTS_EXPLOIT"])) {
+            continue;
+        }
+        foreach ($data["RESULTS_EXPLOIT"] as $exploit) {
+            $results[$cve][] = [
+                "title"  => $exploit["Title"] ?? "",
+                "edb_id" => $exploit["EDB-ID"] ?? "",
+                "path"   => $exploit["Path"] ?? "",
+            ];
+        }
+    }
+
+    return $results;
+}
+
+/**
+ * Orchestration complète et automatique du scan : nmap, puis, si des
+ * services web sont détectés et que les outils sont installés, Nikto et
+ * Nuclei, puis croisement des CVE trouvées avec Exploit-DB. Retourne
+ * un tableau de résultats unifié, sans distinction visible d'origine.
+ */
+function runFullScan($target, $ports, $verbose, $quiet) {
+    if (!$quiet) {
+        $portInfo = $ports ? " (ports : $ports)" : "";
+        echo colorize("[+] Scan de $target$portInfo en cours...\n", "cyan");
+    }
+
+    $rawOutput = runNmapScan($target, $ports, $verbose);
+    if ($rawOutput === null || trim($rawOutput) === "") {
+        return [null, null, null];
+    }
+
+    $findings = parseFindings($rawOutput);
+
+    $webUrls = array_slice(extractWebServices($rawOutput, $target), 0, 2);
+    foreach ($webUrls as $url) {
+        if (toolAvailable("nikto")) {
+            if (!$quiet) {
+                echo colorize("[+] Service web détecté ($url), analyse complémentaire...\n", "cyan");
+            }
+            $niktoRaw = runNiktoScan($url, $verbose);
+            if ($niktoRaw !== null) {
+                $findings = array_merge($findings, parseNiktoFindings($niktoRaw));
+            }
+        }
+        if (toolAvailable("nuclei")) {
+            if (!$quiet) {
+                echo colorize("[+] Analyse complémentaire ($url)...\n", "cyan");
+            }
+            $nucleiRaw = runNucleiScan($url, $verbose);
+            if ($nucleiRaw !== null) {
+                $findings = array_merge($findings, parseNucleiFindings($nucleiRaw));
+            }
+        }
+    }
+
+    $allCves = [];
+    foreach ($findings as $f) {
+        foreach ($f["cves"] as $c) {
+            $allCves[] = $c;
+        }
+    }
+
+    if (!empty($allCves) && toolAvailable("searchsploit")) {
+        if (!$quiet) {
+            echo colorize("[+] Vérification des exploits publics disponibles...\n", "cyan");
+        }
+        $exploitMap = lookupExploitsForCves($allCves);
+        foreach ($findings as &$f) {
+            $matched = [];
+            foreach ($f["cves"] as $c) {
+                if (!empty($exploitMap[$c])) {
+                    $matched = array_merge($matched, $exploitMap[$c]);
+                }
+            }
+            if (!empty($matched)) {
+                $f["exploits"] = $matched;
+                $f["severity"] = "CRITICAL";
+            }
+        }
+        unset($f);
+    }
+
+    $severity = overallSeverity($findings, $rawOutput);
+
+    return [$findings, $severity, $rawOutput];
+}
